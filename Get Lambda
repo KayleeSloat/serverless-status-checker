@@ -1,0 +1,41 @@
+import json
+import boto3
+from boto3.dynamodb.conditions import Key
+
+
+dynamodb = boto3.resource('dynamodb')
+table = dynamodb.Table('WebsiteStatus')
+
+def lambda_handler_get(event, context):
+
+    try:
+        paramaters = event.get("queryStringParameters") or {}
+        url = paramaters.get("url")
+        limit = int (paramaters.get("limit", 5)
+        )
+        
+        if not url:
+            return {
+                "statusCode": 400,
+                "body": json.dumps({
+                    "error": "URL parameter not found."
+                })
+            }
+        
+        response = table.query(
+            KeyConditionExpression=Key('url').eq(url),
+            ScanIndexForward=False,
+            Limit = limit
+
+        )
+
+        return {
+            "statusCode": 200,
+            "body": json.dumps(response.get("Items", []))
+        }
+    
+    except Exception as error_found:
+        return {
+            "statusCode": 500,
+            "body": json.dumps({"error": str(error_found)})
+        }
