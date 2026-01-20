@@ -7,6 +7,7 @@ import os
 from datetime import datetime
 from urllib.parse import urlparse
 import boto3
+from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 import requests
 
@@ -224,7 +225,7 @@ def get_status_history(event, context):
         # Query DynamoDB
         try:
             response = get_table().query(
-                KeyConditionExpression=boto3.dynamodb.conditions.Key('url').eq(url),
+                KeyConditionExpression=Key('url').eq(url),
                 ScanIndexForward=False,  # Sort by timestamp descending (newest first)
                 Limit=limit
             )
