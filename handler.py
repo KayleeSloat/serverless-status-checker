@@ -4,8 +4,10 @@ AWS Lambda handlers for website status checker.
 import json
 import time
 import os
+import ipaddress
 from datetime import datetime
 from urllib.parse import urlparse
+import socket
 import boto3
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
@@ -29,7 +31,7 @@ def get_table():
 
 def validate_url(url):
     """
-    Validate URL format.
+    Validate URL format and check for SSRF vulnerabilities.
     
     Args:
         url (str): URL to validate
@@ -50,6 +52,32 @@ def validate_url(url):
         
         if result.scheme not in ['http', 'https']:
             return False, "URL must use http or https protocol"
+        
+        # Extract hostname (without port)
+        hostname = result.hostname
+        if not hostname:
+            return False, "Invalid hostname"
+        
+        # Block localhost and loopback addresses
+        if hostname.lower() in ['localhost', '127.0.0.1', '::1']:
+            return False, "Access to localhost is not allowed"
+        
+        # Try to resolve hostname to IP and check for private ranges
+        try:
+            # Get IP address
+            ip_str = socket.gethostbyname(hostname)
+            ip = ipaddress.ip_address(ip_str)
+            
+            # Block private IP ranges (RFC 1918, RFC 4193)
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                return False, "Access to private/internal IP addresses is not allowed"
+        except socket.gaierror:
+            # If DNS resolution fails, we'll let requests handle it
+            # This allows the function to work even if the hostname doesn't exist yet
+            pass
+        except ValueError:
+            # Invalid IP format - continue with validation
+            pass
         
         return True, None
     except Exception as e:
