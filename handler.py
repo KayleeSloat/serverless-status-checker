@@ -11,10 +11,19 @@ from botocore.exceptions import ClientError
 import requests
 
 
-# Initialize DynamoDB client
-dynamodb = boto3.resource('dynamodb')
-table_name = os.environ.get('DYNAMODB_TABLE', 'website-status-checks')
-table = dynamodb.Table(table_name)
+# Initialize DynamoDB client (lazy initialization for testing)
+_dynamodb = None
+_table = None
+
+
+def get_table():
+    """Get or initialize DynamoDB table."""
+    global _dynamodb, _table
+    if _table is None:
+        _dynamodb = boto3.resource('dynamodb')
+        table_name = os.environ.get('DYNAMODB_TABLE', 'website-status-checks')
+        _table = _dynamodb.Table(table_name)
+    return _table
 
 
 def validate_url(url):
@@ -111,7 +120,7 @@ def check_website_status(event, context):
         
         # Store in DynamoDB
         try:
-            table.put_item(Item=item)
+            get_table().put_item(Item=item)
         except ClientError as e:
             print(f"DynamoDB error: {e}")
             return {
@@ -214,7 +223,7 @@ def get_status_history(event, context):
         
         # Query DynamoDB
         try:
-            response = table.query(
+            response = get_table().query(
                 KeyConditionExpression=boto3.dynamodb.conditions.Key('url').eq(url),
                 ScanIndexForward=False,  # Sort by timestamp descending (newest first)
                 Limit=limit
