@@ -1,0 +1,124 @@
+import json
+import time
+from urllib.parse import urlparse
+import requests
+
+# -----------------------------
+# Mock DynamoDB (in-memory)
+# -----------------------------
+MOCK_DYNAMODB = []
+
+# -----------------------------
+# Helper functions
+# -----------------------------
+def check_for_valid_protocol(url):
+    parsed_url = urlparse(url)
+    return parsed_url.scheme in ['http', 'https']
+
+# -----------------------------
+# POST Lambda (check website)
+# -----------------------------
+def post_lambda(event):
+    try:
+        body = json.loads(event.get("body", "{}"))
+        url = body.get("url")
+
+        # Validate URL
+        if not url or not check_for_valid_protocol(url):
+            return {
+                "statusCode": 400,
+                "body": json.dumps({
+                    "error": "Invalid URL. Please enter a valid URL with http or https protocol."
+                })
+            }
+
+        # Measure latency
+        start_time = time.time()
+        response = requests.get(url, timeout=5)
+        latency = int((time.time() - start_time) * 1000)
+
+        # Create website status object
+        website_status = {
+            "url": url,
+            "timestamp": int(time.time()),
+            "status_code": response.status_code,
+            "latency_ms": latency
+        }
+
+        # Store in "mock DynamoDB"
+        MOCK_DYNAMODB.append(website_status)
+
+        return {
+            "statusCode": 200,
+            "body": json.dumps(website_status)
+        }
+
+    except Exception as error_found:
+        return {
+            "statusCode": 500,
+            "body": json.dumps({"error": str(error_found)})
+        }
+
+# -----------------------------
+# GET Lambda (retrieve history)
+# -----------------------------
+def get_lambda(event):
+    try:
+        params = event.get("queryStringParameters") or {}
+        url = params.get("url")
+        limit = int(params.get("limit", 5))
+
+        # Validate input
+        if not url:
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"error": "Missing required query parameter: url"})
+            }
+
+        # Filter mock DynamoDB for this URL
+        filtered = [item for item in MOCK_DYNAMODB if item["url"] == url]
+        # Sort newest first
+        filtered.sort(key=lambda x: x["timestamp"], reverse=True)
+        # Apply limit
+        items = filtered[:limit]
+
+        return {
+            "statusCode": 200,
+            "body": json.dumps(items)
+        }
+
+    except Exception as error_found:
+        return {
+            "statusCode": 500,
+            "body": json.dumps({"error": str(error_found)})
+        }
+
+# -----------------------------
+# Test script
+# -----------------------------
+if __name__ == "__main__":
+    # Test POST Lambda
+    print("=== Testing POST Lambda ===")
+    post_event = {
+        "body": json.dumps({"url": "https://example.com"})
+    }
+    post_result = post_lambda(post_event)
+    print(json.dumps(json.loads(post_result["body"]), indent=2))
+
+    # Wait 1 second to get different timestamp
+    time.sleep(1)
+
+    # Test POST Lambda again
+    post_event2 = {
+        "body": json.dumps({"url": "https://example.com"})
+    }
+    post_result2 = post_lambda(post_event2)
+    print(json.dumps(json.loads(post_result2["body"]), indent=2))
+
+    # Test GET Lambda
+    print("\n=== Testing GET Lambda ===")
+    get_event = {
+        "queryStringParameters": {"url": "https://example.com", "limit": "5"}
+    }
+    get_result = get_lambda(get_event)
+    print(json.dumps(json.loads(get_result["body"]), indent=2))
