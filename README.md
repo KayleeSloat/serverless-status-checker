@@ -262,6 +262,31 @@ The application handles various error scenarios:
 - DynamoDB errors (500 Internal Server Error)
 - Invalid JSON (400 Bad Request)
 
+## Security
+
+The application includes several security measures:
+
+### SSRF Protection
+
+To prevent Server-Side Request Forgery (SSRF) attacks, the application validates all URLs and blocks:
+- Localhost and loopback addresses (localhost, 127.0.0.1, ::1)
+- Private IP address ranges (10.x.x.x, 192.168.x.x, 172.16-31.x.x)
+- Link-local addresses (169.254.x.x)
+- Reserved IP addresses
+
+**Note:** The application's core functionality requires making HTTP requests to user-provided URLs. The SSRF protections ensure that these requests cannot target internal infrastructure.
+
+### Best Practices
+
+- Use AWS IAM policies to restrict Lambda execution permissions
+- Enable CloudWatch Logs for monitoring and auditing
+- Set appropriate timeout values (30 seconds for check function)
+- Use environment variables for configuration
+- Enable AWS WAF for API Gateway in production
+- Connection errors (stores with error message)
+- DynamoDB errors (500 Internal Server Error)
+- Invalid JSON (400 Bad Request)
+
 ## License
 
 MIT
