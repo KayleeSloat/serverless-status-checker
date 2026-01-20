@@ -1,0 +1,51 @@
+import json
+import time
+import boto3
+import requests
+from urllib.parse import urlparse
+
+dynamodb = boto3.resource('dynamodb')
+table = dynamodb.Table('WebsiteStatus')
+
+
+def check_for_valid_protocol(url):
+    parsed_url = urlparse(url)
+    return parsed_url.scheme in ['http', 'https']
+
+
+def lambda_handler(event, context):
+    try:
+        body = json.loads(event.get("body", "{}"))
+        url = body.get("url")
+
+        if not url or not check_for_valid_protocol(url):
+            return {
+                "statusCode": 400,
+                "body": json.dumps({
+                    "error": "Invalid URL. Please enter a valid URL with http or https protocol."
+                })
+            }
+
+        start_time = time.time()
+        response = requests.get(url, timeout=5)
+        latency = int((time.time() - start_time) * 1000)
+
+        website_status = {
+            "url": url,
+            "timestamp": int(time.time()),
+            "status_code": response.status_code,
+            "latency_ms": latency
+        }
+
+        table.put_item(Item=website_status)
+
+        return {
+            "statusCode": 200,
+            "body": json.dumps(website_status)
+        }
+
+    except Exception as error_found:
+        return {
+            "statusCode": 500,
+            "body": json.dumps({"error": str(error_found)})
+        }
